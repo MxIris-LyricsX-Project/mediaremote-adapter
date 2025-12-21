@@ -13,15 +13,16 @@
 extern "C" {
 #endif
 
-void bootstrap(void);
-void loop(void);
-void play(void);
-void pause_command(void);
-void toggle_play_pause(void);
-void next_track(void);
-void previous_track(void);
-void stop_command(void);
-void set_time_from_env(void);
+    void bootstrap(void);
+    void loop(void);
+    void play(void);
+    void pause_command(void);
+    void toggle_play_pause(void);
+    void next_track(void);
+    void previous_track(void);
+    void stop_command(void);
+    void update_player_state(void);
+    void set_time_from_env(void);
 
 #ifdef __cplusplus
 }

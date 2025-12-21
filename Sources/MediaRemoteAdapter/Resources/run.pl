@@ -74,7 +74,7 @@ install_xsub("next_track", $libref);
 install_xsub("previous_track", $libref);
 install_xsub("stop_command", $libref);
 install_xsub("set_time_from_env", $libref);
-
+install_xsub("update_player_state", $libref);
 # 4. Call the bootstrap function to initialize the C code.
 bootstrap();
 
@@ -93,6 +93,8 @@ if ($command eq 'loop') {
     previous_track();
 } elsif ($command eq 'stop') {
     stop_command();
+} elsif ($command eq 'update_player_state') {
+    update_player_state();
 } elsif ($command eq 'set_time') {
     my $time = $ARGV[0];
     die "Missing time argument for set_time\n" unless defined $time;

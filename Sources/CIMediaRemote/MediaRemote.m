@@ -20,6 +20,8 @@ static void (*_MRMediaRemoteGetNowPlayingApplicationPID)(
 static void (*_MRMediaRemoteGetNowPlayingApplicationIsPlaying)(
     dispatch_queue_t queue,
     MRMediaRemoteGetNowPlayingApplicationIsPlayingCompletion completion);
+static void (*_MRMediaRemoteGetNowPlayingClient)(dispatch_queue_t queue, MRMediaRemoteGetNowPlayingClientCompletion);
+
 
 // Symbol names
 static const char *const MRMediaRemoteSendCommandName = "MRMediaRemoteSendCommand";
@@ -35,32 +37,24 @@ static const char *const MRMediaRemoteGetNowPlayingApplicationPIDName =
     "MRMediaRemoteGetNowPlayingApplicationPID";
 static const char *const MRMediaRemoteGetNowPlayingApplicationIsPlayingName =
     "MRMediaRemoteGetNowPlayingApplicationIsPlaying";
+static const char *const MRMediaRemoteGetNowPlayingClientName = "MRMediaRemoteGetNowPlayingClient";
 
 // Keys
-CFStringRef kMRMediaRemoteNowPlayingInfoDidChangeNotification =
-    CFSTR("kMRMediaRemoteNowPlayingInfoDidChangeNotification");
-CFStringRef kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification =
-    CFSTR("kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification");
-CFStringRef kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey =
-    CFSTR("kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey");
-CFStringRef kMRMediaRemoteNowPlayingApplicationIsPlayingUserInfoKey =
-    CFSTR("kMRMediaRemoteNowPlayingApplicationIsPlayingUserInfoKey");
-CFStringRef kMRMediaRemoteNowPlayingInfoAlbum =
-    CFSTR("kMRMediaRemoteNowPlayingInfoAlbum");
-CFStringRef kMRMediaRemoteNowPlayingInfoArtist =
-    CFSTR("kMRMediaRemoteNowPlayingInfoArtist");
-CFStringRef kMRMediaRemoteNowPlayingInfoArtworkData =
-    CFSTR("kMRMediaRemoteNowPlayingInfoArtworkData");
-CFStringRef kMRMediaRemoteNowPlayingInfoArtworkMIMEType =
-    CFSTR("kMRMediaRemoteNowPlayingInfoArtworkMIMEType");
-CFStringRef kMRMediaRemoteNowPlayingInfoDuration =
-    CFSTR("kMRMediaRemoteNowPlayingInfoDuration");
-CFStringRef kMRMediaRemoteNowPlayingInfoElapsedTime =
-    CFSTR("kMRMediaRemoteNowPlayingInfoElapsedTime");
-CFStringRef kMRMediaRemoteNowPlayingInfoTimestamp =
-    CFSTR("kMRMediaRemoteNowPlayingInfoTimestamp");
-CFStringRef kMRMediaRemoteNowPlayingInfoTitle =
-    CFSTR("kMRMediaRemoteNowPlayingInfoTitle");
+NSString *kMRMediaRemoteNowPlayingInfoDidChangeNotification = @"kMRMediaRemoteNowPlayingInfoDidChangeNotification";
+NSString *kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification = @"kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification";
+NSString *kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey = @"kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey";
+NSString *kMRMediaRemoteNowPlayingApplicationIsPlayingUserInfoKey = @"kMRMediaRemoteNowPlayingApplicationIsPlayingUserInfoKey";
+NSString *kMRMediaRemoteNowPlayingInfoAlbum = @"kMRMediaRemoteNowPlayingInfoAlbum";
+NSString *kMRMediaRemoteNowPlayingInfoArtist = @"kMRMediaRemoteNowPlayingInfoArtist";
+NSString *kMRMediaRemoteNowPlayingInfoArtworkData = @"kMRMediaRemoteNowPlayingInfoArtworkData";
+NSString *kMRMediaRemoteNowPlayingInfoArtworkMIMEType = @"kMRMediaRemoteNowPlayingInfoArtworkMIMEType";
+NSString *kMRMediaRemoteNowPlayingInfoDuration = @"kMRMediaRemoteNowPlayingInfoDuration";
+NSString *kMRMediaRemoteNowPlayingInfoElapsedTime = @"kMRMediaRemoteNowPlayingInfoElapsedTime";
+NSString *kMRMediaRemoteNowPlayingInfoTimestamp = @"kMRMediaRemoteNowPlayingInfoTimestamp";
+NSString *kMRMediaRemoteNowPlayingInfoTitle = @"kMRMediaRemoteNowPlayingInfoTitle";
+NSString *kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification = @"kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification";
+NSString *kMRMediaRemoteNowPlayingInfoUniqueIdentifier = @"kMRMediaRemoteNowPlayingInfoUniqueIdentifier";
+
 
 __attribute__((constructor)) static void initialize_mediaremote() {
     void *mr_framework_handle = dlopen(MR_FRAMEWORK_PATH, RTLD_LAZY);
@@ -89,6 +83,8 @@ __attribute__((constructor)) static void initialize_mediaremote() {
 
     _MRMediaRemoteGetNowPlayingApplicationIsPlaying = dlsym(
         mr_framework_handle, MRMediaRemoteGetNowPlayingApplicationIsPlayingName);
+    
+    _MRMediaRemoteGetNowPlayingClient = dlsym(mr_framework_handle, MRMediaRemoteGetNowPlayingClientName);
 }
 
 // Public API implementations
@@ -137,5 +133,11 @@ void MRMediaRemoteGetNowPlayingApplicationIsPlaying(
     MRMediaRemoteGetNowPlayingApplicationIsPlayingCompletion completion) {
     if (_MRMediaRemoteGetNowPlayingApplicationIsPlaying) {
         _MRMediaRemoteGetNowPlayingApplicationIsPlaying(queue, completion);
+    }
+}
+
+void MRMediaRemoteGetNowPlayingClient(dispatch_queue_t queue, MRMediaRemoteGetNowPlayingClientCompletion completion) {
+    if (_MRMediaRemoteGetNowPlayingClient) {
+        _MRMediaRemoteGetNowPlayingClient(queue, completion);
     }
 }

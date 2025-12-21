@@ -20,12 +20,7 @@
 static CFRunLoopRef _runLoop = NULL;
 static dispatch_queue_t _queue;
 static dispatch_block_t _debounce_block = NULL;
-static NSString *_targetBundleIdentifier = NULL;
-
-// These keys identify a now playing item uniquely.
-static NSArray<NSString *> *identifyingItemKeys(void) {
-    return @[ (NSString *)kTitle, (NSString *)kArtist, (NSString *)kAlbum ];
-}
+static NSArray<NSString *> *_targetBundleIdentifiers = NULL;
 
 static void printOut(NSString *message) {
     fprintf(stdout, "%s\n", [message UTF8String]);
@@ -39,204 +34,178 @@ static void printErr(NSString *message) {
 
 static NSString *formatError(NSError *error) {
     return
-        [NSString stringWithFormat:@"%@ (%@:%ld)", [error localizedDescription],
-                                   [error domain], (long)[error code]];
+    [NSString stringWithFormat:@"%@ (%@:%ld)", [error localizedDescription],
+     [error domain], (long)[error code]];
 }
 
-static NSString *serializeData(NSDictionary *data, BOOL diff) {
+static NSString *serializeData(NSDictionary *data, NSString *notificationName) {
     NSError *error;
     NSDictionary *wrappedData = @{
-        @"type" : @"data",
-        @"diff" : @(diff),
-        @"payload" : data,
+        @"notificationName": notificationName,
+        @"payload" : data != nil ? data : @{},
     };
     NSData *serialized = [NSJSONSerialization dataWithJSONObject:wrappedData
                                                          options:0
                                                            error:&error];
     if (!serialized) {
         printErr([NSString stringWithFormat:@"Failed for serialize data: %@",
-                                            formatError(error)]);
+                  formatError(error)]);
         return nil;
     }
     return [[NSString alloc] initWithData:serialized
                                  encoding:NSUTF8StringEncoding];
 }
 
-static NSMutableDictionary *
-convertNowPlayingInformation(NSDictionary *information) {
+static NSMutableDictionary * convertNowPlayingInformation(NSDictionary *information) {
+    
+    if (!information) {
+        return nil;
+    }
+    
     NSMutableDictionary *data = [NSMutableDictionary dictionary];
-
+    
     void (^setKey)(id, id) = ^(id key, id fromKey) {
-      id value = [NSNull null];
-      if (information != nil) {
-          id result =
-              information[fromKey];
-          if (result != nil) {
-              value = result;
-          }
-      }
-      [data setObject:value forKey:key];
+        id value = [NSNull null];
+        if (information != nil) {
+            id result =
+            information[fromKey];
+            if (result != nil) {
+                value = result;
+            }
+        }
+        [data setObject:value forKey:key];
     };
-
+    
     void (^setValue)(id, id (^)(void)) = ^(id key, id (^evaluate)(void)) {
-      id value = nil;
-      if (information != nil) {
-          value = evaluate();
-      }
-      if (value != nil) {
-          [data setObject:value forKey:key];
-      } else {
-          [data setObject:[NSNull null] forKey:key];
-      }
+        id value = nil;
+        if (information != nil) {
+            value = evaluate();
+        }
+        if (value != nil) {
+            [data setObject:value forKey:key];
+        } else {
+            [data setObject:[NSNull null] forKey:key];
+        }
     };
-
-    setKey((NSString *)kTitle, (id)kMRMediaRemoteNowPlayingInfoTitle);
-    setKey((NSString *)kArtist, (id)kMRMediaRemoteNowPlayingInfoArtist);
-    setKey((NSString *)kAlbum, (id)kMRMediaRemoteNowPlayingInfoAlbum);
-    setValue((NSString *)kDurationMicros, ^id {
-      id duration =
-          information[(NSString *)kMRMediaRemoteNowPlayingInfoDuration];
-      if (duration != nil) {
-          NSTimeInterval durationMicros = [duration doubleValue] * 1000 * 1000;
-          if (isinf(durationMicros) || isnan(durationMicros)) {
-              return nil;
-          }
-          return @(floor(durationMicros));
-      }
-      return nil;
+    
+    setKey(kTitle, kMRMediaRemoteNowPlayingInfoTitle);
+    setKey(kArtist, kMRMediaRemoteNowPlayingInfoArtist);
+    setKey(kAlbum, kMRMediaRemoteNowPlayingInfoAlbum);
+    setKey(@"uniqueIdentifier", kMRMediaRemoteNowPlayingInfoUniqueIdentifier);
+    setValue(kDurationMicros, ^id {
+        id duration =
+        information[kMRMediaRemoteNowPlayingInfoDuration];
+        if (duration != nil) {
+            NSTimeInterval durationMicros = [duration doubleValue] * 1000 * 1000;
+            if (isinf(durationMicros) || isnan(durationMicros)) {
+                return nil;
+            }
+            return @(floor(durationMicros));
+        }
+        return nil;
     });
-    setValue((NSString *)kElapsedTimeMicros, ^id {
-      id elapsedTimeValue =
-          information[(NSString *)kMRMediaRemoteNowPlayingInfoElapsedTime];
-      if (elapsedTimeValue != nil) {
-          NSTimeInterval elapsedTimeMicros =
-              [elapsedTimeValue doubleValue] * 1000 * 1000;
-          if (isinf(elapsedTimeMicros) || isnan(elapsedTimeMicros)) {
-              return nil;
-          }
-          return @(floor(elapsedTimeMicros));
-      }
-      return nil;
+    setValue(kElapsedTimeMicros, ^id {
+        id elapsedTimeValue =
+        information[kMRMediaRemoteNowPlayingInfoElapsedTime];
+        if (elapsedTimeValue != nil) {
+            NSTimeInterval elapsedTimeMicros =
+            [elapsedTimeValue doubleValue] * 1000 * 1000;
+            if (isinf(elapsedTimeMicros) || isnan(elapsedTimeMicros)) {
+                return nil;
+            }
+            return @(floor(elapsedTimeMicros));
+        }
+        return nil;
     });
-    setValue((NSString *)kTimestampEpochMicros, ^id {
-      NSDate *timestampValue =
-          information[(NSString *)kMRMediaRemoteNowPlayingInfoTimestamp];
-      if (timestampValue != nil) {
-          NSTimeInterval timestampEpoch = [timestampValue timeIntervalSince1970];
-          NSTimeInterval timestampEpochMicro = timestampEpoch * 1000 * 1000;
-          return @(floor(timestampEpochMicro));
-      }
-      return nil;
+    setValue(kTimestampEpochMicros, ^id {
+        NSDate *timestampValue =
+        information[kMRMediaRemoteNowPlayingInfoTimestamp];
+        if (timestampValue != nil) {
+            NSTimeInterval timestampEpoch = [timestampValue timeIntervalSince1970];
+            NSTimeInterval timestampEpochMicro = timestampEpoch * 1000 * 1000;
+            return @(floor(timestampEpochMicro));
+        }
+        return nil;
     });
-    setKey((NSString *)kArtworkMimeType,
-           (id)kMRMediaRemoteNowPlayingInfoArtworkMIMEType);
-    setValue((NSString *)kArtworkDataBase64, ^id {
-      NSData *artworkDataValue =
-          (NSData *)information[(NSString *)kMRMediaRemoteNowPlayingInfoArtworkData];
-      if (artworkDataValue != nil) {
-          return [artworkDataValue base64EncodedStringWithOptions:0];
-      }
-      return nil;
+    setKey(kArtworkMimeType, kMRMediaRemoteNowPlayingInfoArtworkMIMEType);
+    setValue(kArtworkDataBase64, ^id {
+        NSData *artworkDataValue =
+        (NSData *)information[kMRMediaRemoteNowPlayingInfoArtworkData];
+        if (artworkDataValue != nil) {
+            return [artworkDataValue base64EncodedStringWithOptions:0];
+        }
+        return nil;
     });
-
+    
     return data;
 }
 
-static NSDictionary *createDiff(NSDictionary *a, NSDictionary *b) {
-    NSMutableDictionary *diff = [NSMutableDictionary dictionary];
-    NSMutableSet *allKeys = [NSMutableSet setWithArray:a.allKeys];
-    [allKeys addObjectsFromArray:b.allKeys];
-    for (id key in allKeys) {
-        id oldValue = a[key];
-        id newValue = b[key];
-        if (![oldValue isEqual:newValue]) {
-            diff[key] = newValue ?: [NSNull null];
-        }
-    }
-    return [diff copy];
-}
-
-static bool isSameItemIdentity(NSDictionary *a, NSDictionary *b) {
-    for (NSString *key in identifyingItemKeys()) {
-        id aValue = a[key];
-        id bValue = b[key];
-        if (aValue == nil || bValue == nil || ![aValue isEqual:bValue]) {
-            return false;
-        }
-    }
-    return true;
-}
 
 // Always sends the full data payload. No more diffing.
-static void printData(NSDictionary *data) {
-    NSString *serialized = serializeData(data, false);
+static void printData(NSDictionary *data, NSString *notificationName) {
+    NSString *serialized = serializeData(data, notificationName);
     if (serialized != nil) {
         printOut(serialized);
     }
 }
 
-static void appForPID(int pid, void (^block)(NSRunningApplication *)) {
-    if (pid <= 0) return;
-    NSRunningApplication *process =
-        [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-    if (process != nil && process.bundleIdentifier != nil) {
-        block(process);
-    }
-}
-
 // Centralized function to process track info.
 // It converts, filters, and prints the final JSON data.
-static void processNowPlayingInfo(NSDictionary *nowPlayingInfo, BOOL isPlaying, NSRunningApplication *application) {
-    if (nowPlayingInfo == nil || [nowPlayingInfo count] == 0) return;
-    id title = nowPlayingInfo[(NSString *)kMRMediaRemoteNowPlayingInfoTitle];
-    if (title == nil || title == [NSNull null] || ([title isKindOfClass:[NSString class]] && [(NSString *)title length] == 0)) return;
-
-    // If a target bundle ID is set, filter out notifications from other apps.
-    if (_targetBundleIdentifier && application && ![application.bundleIdentifier isEqual:_targetBundleIdentifier]) {
+static void processNowPlayingInfo(NSDictionary *nowPlayingInfo, BOOL isPlaying, _MRNowPlayingClientProtobuf *client) {
+    if (nowPlayingInfo == nil || [nowPlayingInfo count] == 0) {
+        printData(nil, kMRMediaRemoteNowPlayingInfoDidChangeNotification);
         return;
     }
-
-    NSMutableDictionary *data = convertNowPlayingInformation(nowPlayingInfo);
-    [data setObject:@(isPlaying) forKey:(NSString *)kIsPlaying];
-    if (application) {
-        data[(NSString *)kBundleIdentifier] = application.bundleIdentifier;
-        data[(NSString *)kApplicationName] = application.localizedName;
+    id title = nowPlayingInfo[kMRMediaRemoteNowPlayingInfoTitle];
+    if (title == nil || title == [NSNull null] || ([title isKindOfClass:[NSString class]] && [(NSString *)title length] == 0)) {
+        printData(nil, kMRMediaRemoteNowPlayingInfoDidChangeNotification);
+        return;
     }
     
-    printData(data);
+    NSString *clientBundleIdentifier = client.bundleIdentifier;
+    NSString *parentApplicationBundleIdentifier = client.parentApplicationBundleIdentifier;
+    
+    if (parentApplicationBundleIdentifier) {
+        clientBundleIdentifier = parentApplicationBundleIdentifier;
+    }
+    
+    if (clientBundleIdentifier && _targetBundleIdentifiers.count > 0 && ![_targetBundleIdentifiers containsObject:clientBundleIdentifier]) {
+        return;
+    }
+    
+    NSMutableDictionary *data = convertNowPlayingInformation(nowPlayingInfo);
+    [data setObject:@(isPlaying) forKey:(NSString *)kIsPlaying];
+    printData(data, kMRMediaRemoteNowPlayingInfoDidChangeNotification);
+}
+
+static void processPlaybackState(id playbackState) {
+    if (playbackState) {
+        printData(@{ @"playbackState": @([playbackState integerValue])}, kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification);
+    } else {
+        printData(nil, kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification);
+    }
+
 }
 
 // Fetches all necessary information (track info, playing state, PID)
 // and passes it to the processing function.
-static void fetchAndProcess(int pid) {
+static void fetchAndProcess(void (^completion)(void)) {
     MRMediaRemoteGetNowPlayingInfo(_queue, ^(CFDictionaryRef information) {
         if (information == NULL) {
-            return; // No media playing, do nothing.
+            printData(nil, kMRMediaRemoteNowPlayingInfoDidChangeNotification);
+            if (completion) {
+                completion();
+            }
+            return;
         }
         NSDictionary *infoDict = [(__bridge NSDictionary *)information copy];
-        MRMediaRemoteGetNowPlayingApplicationIsPlaying(_queue, ^(Boolean isPlaying) {
-            void (^processWithPid)(int) = ^(int finalPid) {
-                if (finalPid > 0) {
-                    __block bool appFound = false;
-                    appForPID(finalPid, ^(NSRunningApplication *process) {
-                        appFound = true;
-                        processNowPlayingInfo(infoDict, isPlaying, process);
-                    });
-                    if (!appFound) {
-                        processNowPlayingInfo(infoDict, isPlaying, nil);
-                    }
-                } else {
-                    processNowPlayingInfo(infoDict, isPlaying, nil);
+        MRMediaRemoteGetNowPlayingClient(_queue, ^(_MRNowPlayingClientProtobuf * _Nullable client) {
+            MRMediaRemoteGetNowPlayingApplicationIsPlaying(_queue, ^(Boolean isPlaying) {
+                processNowPlayingInfo(infoDict, isPlaying, client);
+                if (completion) {
+                    completion();
                 }
-            };
-
-            if (pid > 0) {
-                processWithPid(pid);
-            } else {
-                MRMediaRemoteGetNowPlayingApplicationPID(_queue, ^(int fetchedPid) {
-                    processWithPid(fetchedPid);
-                });
-            }
+            });
         });
     });
 }
@@ -244,54 +213,52 @@ static void fetchAndProcess(int pid) {
 // C function implementations to be called from Perl
 void bootstrap(void) {
     _queue = dispatch_queue_create("mediaremote-adapter", DISPATCH_QUEUE_SERIAL);
-
+    
     // Read the target bundle identifier from the environment variable.
     // This is set by the Perl script based on the `--id` command-line argument.
     const char *bundleIdEnv = getenv("MEDIAREMOTEADAPTER_bundle_identifier");
     if (bundleIdEnv != NULL) {
-        _targetBundleIdentifier = [NSString stringWithUTF8String:bundleIdEnv];
+        _targetBundleIdentifiers = [[NSString stringWithUTF8String:bundleIdEnv] componentsSeparatedByString:@"|"];
     }
 }
 
 void loop(void) {
     _runLoop = CFRunLoopGetCurrent();
-
-    MRMediaRemoteRegisterForNowPlayingNotifications(
-        dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
-
+    
+    MRMediaRemoteRegisterForNowPlayingNotifications(_queue);
+    
     // --- Initial Fetch ---
     // Fetch the current state immediately when the loop starts, so we don't
     // have to wait for a media change event.
     // We schedule this on our serial queue to ensure the run loop is active.
     dispatch_async(_queue, ^{
-        fetchAndProcess(0);
+        fetchAndProcess(nil);
     });
-
-    void (^handler)(NSNotification *) = ^(NSNotification *notification) {
-      // If there's an existing block scheduled, cancel it.
-      if (_debounce_block) {
-          dispatch_block_cancel(_debounce_block);
-      }
-
-      // Create a new block to be executed after the delay.
-      _debounce_block = dispatch_block_create(0, ^{
-          id pidValue = notification.userInfo[(NSString *)kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey];
-          int pid = (pidValue != nil) ? [pidValue intValue] : 0;
-          fetchAndProcess(pid);
-      });
-      
-      // Schedule the new block to run after a 100ms delay.
-      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), _queue, _debounce_block);
-    };
     
     [[NSNotificationCenter defaultCenter]
-        addObserverForName:(NSString *)kMRMediaRemoteNowPlayingInfoDidChangeNotification
-                    object:nil
-                     queue:nil
-                usingBlock:handler];
-
+     addObserverForName:(NSString *)kMRMediaRemoteNowPlayingInfoDidChangeNotification
+     object:nil
+     queue:nil
+     usingBlock:^(NSNotification * _Nonnull notification) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), _queue, ^{
+            fetchAndProcess(nil);
+        });
+    }];
+    
+    [[NSNotificationCenter defaultCenter]
+     addObserverForName:kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification
+     object:nil
+     queue:nil
+     usingBlock:^(NSNotification * _Nonnull notification) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), _queue, ^{
+            processPlaybackState(notification.userInfo[@"kMRMediaRemotePlaybackStateUserInfoKey"]);
+        });
+    }];
+    
     CFRunLoopRun();
 }
+
+
 
 void play(void) {
     MRMediaRemoteSendCommand(kMRPlay, nil);
@@ -317,6 +284,18 @@ void stop_command(void) {
     MRMediaRemoteSendCommand(kMRStop, nil);
 }
 
+void update_player_state(void) {
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+    
+    dispatch_async(_queue, ^{
+        fetchAndProcess(^{
+            dispatch_semaphore_signal(semaphore);
+        });
+    });
+    
+    dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC));
+}
+
 void set_time_from_env(void) {
     const char *timeStr = getenv("MEDIAREMOTE_SET_TIME");
     if (timeStr == NULL) {
@@ -325,4 +304,4 @@ void set_time_from_env(void) {
     
     double time = atof(timeStr);
     MRMediaRemoteSetElapsedTime(time);
-} 
+}
