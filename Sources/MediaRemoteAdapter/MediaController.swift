@@ -60,18 +60,61 @@ public final class MediaController {
         let errorPipe = Pipe()
         process.standardError = errorPipe
 
+        // Use buffers and readabilityHandler to avoid pipe deadlock.
+        // The deadlock occurs when:
+        // 1. Parent calls waitUntilExit() before reading pipe
+        // 2. Child writes to stdout, filling the pipe buffer (typically 64KB)
+        // 3. Child blocks on write, cannot exit
+        // 4. Parent waits forever for child to exit
+        var outputData = Data()
+        var errorData = Data()
+        let outputLock = NSLock()
+        let errorLock = NSLock()
+
+        outputPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty {
+                outputLock.lock()
+                outputData.append(data)
+                outputLock.unlock()
+            }
+        }
+
+        errorPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if !data.isEmpty {
+                errorLock.lock()
+                errorData.append(data)
+                errorLock.unlock()
+            }
+        }
+
         do {
             try process.run()
             process.waitUntilExit()
 
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let output = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Stop the readability handlers
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            errorPipe.fileHandleForReading.readabilityHandler = nil
 
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            // Read any remaining data
+            outputLock.lock()
+            let remainingOutput = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            outputData.append(remainingOutput)
+            outputLock.unlock()
+
+            errorLock.lock()
+            let remainingError = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            errorData.append(remainingError)
+            errorLock.unlock()
+
+            let output = String(data: outputData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
             let errorOutput = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
 
             return (output, errorOutput, process.terminationStatus)
         } catch {
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            errorPipe.fileHandleForReading.readabilityHandler = nil
             return (nil, error.localizedDescription, -1)
         }
     }
