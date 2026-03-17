@@ -6,3 +6,4 @@ package-lock.json
 CMakePresets.json
 .build
 .swiftpm
+.claude

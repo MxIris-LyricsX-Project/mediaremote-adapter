@@ -9,7 +9,6 @@
 #include <sys/sysctl.h>
 #include <unistd.h>
 
-#import <AppKit/AppKit.h>
 #import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/Foundation.h>
 

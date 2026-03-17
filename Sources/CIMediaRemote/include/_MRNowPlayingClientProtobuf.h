@@ -1,5 +1,5 @@
-#ifndef PrivateMediaRemote__MRNowPlayingClientProtobuf_h
-#define PrivateMediaRemote__MRNowPlayingClientProtobuf_h
+#ifndef _MRNowPlayingClientProtobuf_h
+#define _MRNowPlayingClientProtobuf_h
 
 #import <Foundation/Foundation.h>
 
@@ -27,4 +27,4 @@
 
 @end
 
-#endif /* PrivateMediaRemote__MRNowPlayingClientProtobuf_h */
+#endif /* _MRNowPlayingClientProtobuf_h */

@@ -1,4 +1,5 @@
-// swift-tools-version:5.5
+// swift-tools-version:6.2
+
 import PackageDescription
 
 let package = Package(
@@ -33,5 +34,6 @@ let package = Package(
                 .unsafeFlags(["-framework", "AppKit"])
             ]
         )
-    ]
-) 
+    ],
+    swiftLanguageModes: [.v5],
+)
