@@ -24,15 +24,6 @@ let package = Package(
         ),
         .target(
             name: "CIMediaRemote",
-            dependencies: [],
-            publicHeadersPath: "include",
-            cSettings: [
-                .unsafeFlags(["-fno-objc-arc"])
-            ],
-            linkerSettings: [
-                .unsafeFlags(["-framework", "Foundation"]),
-                .unsafeFlags(["-framework", "AppKit"])
-            ]
         )
     ],
     swiftLanguageModes: [.v5],
