@@ -17,61 +17,11 @@
 extern "C" {
 #endif
     
-#pragma mark - Notifications
-    extern NSString *kMRMediaRemoteNowPlayingInfoDidChangeNotification;
-    extern NSString *kMRMediaRemoteNowPlayingPlaybackQueueDidChangeNotification;
-    extern NSString *kMRMediaRemotePickableRoutesDidChangeNotification;
-    extern NSString *kMRMediaRemoteNowPlayingApplicationDidChangeNotification;
-    extern NSString *kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification;
-    extern NSString *kMRMediaRemoteRouteStatusDidChangeNotification;
-    extern NSString *kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification;
-    
-#pragma mark - Keys
-    extern NSString *kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey;
-    extern NSString *kMRMediaRemoteNowPlayingApplicationIsPlayingUserInfoKey;
-    extern NSString *kMRMediaRemoteNowPlayingInfoAlbum;
-    extern NSString *kMRMediaRemoteNowPlayingInfoArtist;
-    extern NSString *kMRMediaRemoteNowPlayingInfoArtworkData;
-    extern NSString *kMRMediaRemoteNowPlayingInfoArtworkMIMEType;
-    extern NSString *kMRMediaRemoteNowPlayingInfoChapterNumber;
-    extern NSString *kMRMediaRemoteNowPlayingInfoComposer;
-    extern NSString *kMRMediaRemoteNowPlayingInfoDuration;
-    extern NSString *kMRMediaRemoteNowPlayingInfoElapsedTime;
-    extern NSString *kMRMediaRemoteNowPlayingInfoGenre;
-    extern NSString *kMRMediaRemoteNowPlayingInfoIsAdvertisement;
-    extern NSString *kMRMediaRemoteNowPlayingInfoIsBanned;
-    extern NSString *kMRMediaRemoteNowPlayingInfoIsInWishList;
-    extern NSString *kMRMediaRemoteNowPlayingInfoIsLiked;
-    extern NSString *kMRMediaRemoteNowPlayingInfoIsMusicApp;
-    extern NSString *kMRMediaRemoteNowPlayingInfoMediaType;
-    extern NSString *kMRMediaRemoteNowPlayingInfoPlaybackRate;
-    extern NSString *kMRMediaRemoteNowPlayingInfoProhibitsSkip;
-    extern NSString *kMRMediaRemoteNowPlayingInfoQueueIndex;
-    extern NSString *kMRMediaRemoteNowPlayingInfoRadioStationIdentifier;
-    extern NSString *kMRMediaRemoteNowPlayingInfoRepeatMode;
-    extern NSString *kMRMediaRemoteNowPlayingInfoShuffleMode;
-    extern NSString *kMRMediaRemoteNowPlayingInfoStartTime;
-    extern NSString *kMRMediaRemoteNowPlayingInfoSupportsFastForward15Seconds;
-    extern NSString *kMRMediaRemoteNowPlayingInfoSupportsIsBanned;
-    extern NSString *kMRMediaRemoteNowPlayingInfoSupportsIsLiked;
-    extern NSString *kMRMediaRemoteNowPlayingInfoSupportsRewind15Seconds;
-    extern NSString *kMRMediaRemoteNowPlayingInfoTimestamp;
-    extern NSString *kMRMediaRemoteNowPlayingInfoTitle;
-    extern NSString *kMRMediaRemoteNowPlayingInfoTotalChapterCount;
-    extern NSString *kMRMediaRemoteNowPlayingInfoTotalDiscCount;
-    extern NSString *kMRMediaRemoteNowPlayingInfoTotalQueueCount;
-    extern NSString *kMRMediaRemoteNowPlayingInfoTotalTrackCount;
-    extern NSString *kMRMediaRemoteNowPlayingInfoTrackNumber;
-    extern NSString *kMRMediaRemoteNowPlayingInfoUniqueIdentifier;
-    extern NSString *kMRMediaRemoteNowPlayingInfoRadioStationHash;
-    extern NSString *kMRMediaRemoteOptionMediaType;
-    extern NSString *kMRMediaRemoteOptionSourceID;
-    extern NSString *kMRMediaRemoteOptionTrackID;
-    extern NSString *kMRMediaRemoteOptionStationID;
-    extern NSString *kMRMediaRemoteOptionStationHash;
-    extern NSString *kMRMediaRemoteRouteDescriptionUserInfoKey;
-    extern NSString *kMRMediaRemoteRouteStatusUserInfoKey;
-    
+#pragma mark - Notifications and Keys
+#define MR_NSSTRING(name) extern NSString *name;
+#include "MediaRemoteConstants.def"
+#undef MR_NSSTRING
+
 #pragma mark - API
     typedef enum {
         kMRPlay = 0,
