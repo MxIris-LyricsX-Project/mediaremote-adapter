@@ -18,10 +18,12 @@ extern "C" {
 #endif
     
 #pragma mark - Notifications and Keys
-#define MR_NSSTRING(name) extern NSString *name;
+#define MR_NSSTRING(name) extern NSString * _Nonnull name;
 #include "MediaRemoteConstants.def"
 #undef MR_NSSTRING
 
+    NS_HEADER_AUDIT_BEGIN(nullability, sendability)
+    
 #pragma mark - API
     typedef enum {
         kMRPlay = 0,
@@ -44,7 +46,7 @@ extern "C" {
         kMRRemoveTrackFromWishList = 0x6D
     } MRCommand;
     
-    Boolean MRMediaRemoteSendCommand(MRCommand command, id userInfo);
+    Boolean MRMediaRemoteSendCommand(MRCommand command, id _Nullable userInfo);
     void MRMediaRemoteSetElapsedTime(double elapsedTime);
     void MRMediaRemoteRegisterForNowPlayingNotifications(dispatch_queue_t queue);
     void MRMediaRemoteUnregisterForNowPlayingNotifications();
@@ -58,8 +60,13 @@ extern "C" {
     void MRMediaRemoteGetNowPlayingInfo(dispatch_queue_t queue, MRMediaRemoteGetNowPlayingInfoCompletion completion);
     void MRMediaRemoteGetNowPlayingApplicationIsPlaying(dispatch_queue_t queue, MRMediaRemoteGetNowPlayingApplicationIsPlayingCompletion completion);
     void MRMediaRemoteGetNowPlayingClient(dispatch_queue_t queue, MRMediaRemoteGetNowPlayingClientCompletion completion);
+
+    NS_HEADER_AUDIT_END(nullability, sendability)
+
+
 #if __cplusplus
 }
 #endif
+
 
 #endif /* MEDIAREMOTE_H_ */
