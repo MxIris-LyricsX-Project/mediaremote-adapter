@@ -1,0 +1,15 @@
+{
+  "originHash" : "e78fdb518340993050725dda43b9e78c0ddf1dcf8e87a2a6086e89cf2b097bac",
+  "pins" : [
+    {
+      "identity" : "opensoftlinking",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/MxIris-Reverse-Engineering/OpenSoftLinking",
+      "state" : {
+        "revision" : "bdc30a77b63b4209acdb4fe777b57a9c83cabc7a",
+        "version" : "0.1.0"
+      }
+    }
+  ],
+  "version" : 3
+}
