@@ -8,8 +8,15 @@
 // To add a new constant: add one line below in the appropriate section.
 // To remove one: delete the line. The header, definitions, and constructor
 // resolver list all stay in sync automatically.
+//
+// NOTE: This file lives next to MediaRemote.h in the SPM publicHeadersPath
+// directory by design — MediaRemote.h #includes it via X-macro expansion to
+// generate its extern declarations. Despite the public placement, this is
+// NOT a standalone header: it has no header guard (re-include is required by
+// the X-macro pattern) and #include-ing it without first defining
+// MR_NSSTRING(name) will not produce useful output. Treat as internal.
 
-// MARK: - Notifications (7)
+// MARK: - Notifications
 MR_NSSTRING(kMRMediaRemoteNowPlayingInfoDidChangeNotification)
 MR_NSSTRING(kMRMediaRemoteNowPlayingPlaybackQueueDidChangeNotification)
 MR_NSSTRING(kMRMediaRemotePickableRoutesDidChangeNotification)
@@ -18,7 +25,7 @@ MR_NSSTRING(kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification)
 MR_NSSTRING(kMRMediaRemoteRouteStatusDidChangeNotification)
 MR_NSSTRING(kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification)
 
-// MARK: - Keys (44)
+// MARK: - Keys
 MR_NSSTRING(kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey)
 MR_NSSTRING(kMRMediaRemoteNowPlayingApplicationIsPlayingUserInfoKey)
 MR_NSSTRING(kMRMediaRemoteNowPlayingInfoAlbum)
