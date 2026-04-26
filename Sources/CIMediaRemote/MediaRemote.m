@@ -1,45 +1,50 @@
 #include <dlfcn.h>
 #import <Foundation/Foundation.h>
+#import <OpenSoftLinking/OpenSoftLinking.h>
 
 #include "MediaRemote.h"
 
-#define MR_FRAMEWORK_PATH                                                      \
-    "/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote"
+OPEN_SOFT_LINK_PRIVATE_FRAMEWORK_OPTIONAL(MediaRemote)
 
-// Function pointers
-static Boolean (*_MRMediaRemoteSendCommand)(MRCommand command, id userInfo);
-static void (*_MRMediaRemoteSetElapsedTime)(double elapsedTime);
-static void (*_MRMediaRemoteRegisterForNowPlayingNotifications)(
-    dispatch_queue_t queue);
-static void (*_MRMediaRemoteUnregisterForNowPlayingNotifications)();
-static void (*_MRMediaRemoteGetNowPlayingInfo)(
-    dispatch_queue_t queue, MRMediaRemoteGetNowPlayingInfoCompletion completion);
-static void (*_MRMediaRemoteGetNowPlayingApplicationPID)(
-    dispatch_queue_t queue,
-    MRMediaRemoteGetNowPlayingApplicationPIDCompletion completion);
-static void (*_MRMediaRemoteGetNowPlayingApplicationIsPlaying)(
-    dispatch_queue_t queue,
-    MRMediaRemoteGetNowPlayingApplicationIsPlayingCompletion completion);
-static void (*_MRMediaRemoteGetNowPlayingClient)(dispatch_queue_t queue, MRMediaRemoteGetNowPlayingClientCompletion);
+// Local helpers: declare a private API + its graceful public wrapper in one line.
+// Two variants because C does not allow `return expr;` in a void function.
+#define MR_SOFT_FN(name, rt, decls, names, fallback)                       \
+    OPEN_SOFT_LINK_MAY_FAIL(MediaRemote, name, rt, decls, names)           \
+    rt name decls {                                                        \
+        if (!canLoad_MediaRemote_##name()) return (fallback);              \
+        return name##_soft names;                                          \
+    }
 
+#define MR_SOFT_VOID_FN(name, decls, names)                                \
+    OPEN_SOFT_LINK_MAY_FAIL(MediaRemote, name, void, decls, names)         \
+    void name decls {                                                      \
+        if (!canLoad_MediaRemote_##name()) return;                         \
+        name##_soft names;                                                 \
+    }
 
-// Symbol names
-static const char *const MRMediaRemoteSendCommandName = "MRMediaRemoteSendCommand";
-static const char *const MRMediaRemoteSetElapsedName =
-    "MRMediaRemoteSetElapsedTime";
-static const char *const MRMediaRemoteRegisterForNowPlayingNotificationsName =
-    "MRMediaRemoteRegisterForNowPlayingNotifications";
-static const char *const MRMediaRemoteUnregisterForNowPlayingNotificationsName =
-    "MRMediaRemoteUnregisterForNowPlayingNotifications";
-static const char *const MRMediaRemoteGetNowPlayingInfoName =
-    "MRMediaRemoteGetNowPlayingInfo";
-static const char *const MRMediaRemoteGetNowPlayingApplicationPIDName =
-    "MRMediaRemoteGetNowPlayingApplicationPID";
-static const char *const MRMediaRemoteGetNowPlayingApplicationIsPlayingName =
-    "MRMediaRemoteGetNowPlayingApplicationIsPlaying";
-static const char *const MRMediaRemoteGetNowPlayingClientName = "MRMediaRemoteGetNowPlayingClient";
+MR_SOFT_FN(MRMediaRemoteSendCommand, Boolean,
+    (MRCommand command, id userInfo), (command, userInfo), false)
+MR_SOFT_VOID_FN(MRMediaRemoteSetElapsedTime,
+    (double elapsedTime), (elapsedTime))
+MR_SOFT_VOID_FN(MRMediaRemoteRegisterForNowPlayingNotifications,
+    (dispatch_queue_t queue), (queue))
+MR_SOFT_VOID_FN(MRMediaRemoteUnregisterForNowPlayingNotifications, (void), ())
+MR_SOFT_VOID_FN(MRMediaRemoteGetNowPlayingInfo,
+    (dispatch_queue_t queue, MRMediaRemoteGetNowPlayingInfoCompletion completion),
+    (queue, completion))
+MR_SOFT_VOID_FN(MRMediaRemoteGetNowPlayingApplicationPID,
+    (dispatch_queue_t queue, MRMediaRemoteGetNowPlayingApplicationPIDCompletion completion),
+    (queue, completion))
+MR_SOFT_VOID_FN(MRMediaRemoteGetNowPlayingApplicationIsPlaying,
+    (dispatch_queue_t queue, MRMediaRemoteGetNowPlayingApplicationIsPlayingCompletion completion),
+    (queue, completion))
+MR_SOFT_VOID_FN(MRMediaRemoteGetNowPlayingClient,
+    (dispatch_queue_t queue, MRMediaRemoteGetNowPlayingClientCompletion completion),
+    (queue, completion))
 
-// Keys
+// NSString constants: fallback string literals identical to the framework's
+// actual exported values. The constructor below overwrites each one with the
+// framework's real pointer when available; on failure the fallback is kept.
 NSString *kMRMediaRemoteNowPlayingInfoDidChangeNotification = @"kMRMediaRemoteNowPlayingInfoDidChangeNotification";
 NSString *kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification = @"kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification";
 NSString *kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey = @"kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey";
@@ -52,92 +57,34 @@ NSString *kMRMediaRemoteNowPlayingInfoDuration = @"kMRMediaRemoteNowPlayingInfoD
 NSString *kMRMediaRemoteNowPlayingInfoElapsedTime = @"kMRMediaRemoteNowPlayingInfoElapsedTime";
 NSString *kMRMediaRemoteNowPlayingInfoTimestamp = @"kMRMediaRemoteNowPlayingInfoTimestamp";
 NSString *kMRMediaRemoteNowPlayingInfoTitle = @"kMRMediaRemoteNowPlayingInfoTitle";
-NSString *kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification = @"kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification";
 NSString *kMRMediaRemoteNowPlayingInfoUniqueIdentifier = @"kMRMediaRemoteNowPlayingInfoUniqueIdentifier";
+NSString *kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification = @"kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification";
 
+__attribute__((constructor))
+static void resolveMediaRemoteConstants(void) {
+    void *handle = MediaRemoteLibrary();
+    if (!handle) return;
 
-__attribute__((constructor)) static void initialize_mediaremote() {
-    void *mr_framework_handle = dlopen(MR_FRAMEWORK_PATH, RTLD_LAZY);
-    if (!mr_framework_handle) {
-        return;
-    }
+    #define OSL_RESOLVE_NSSTRING(name) do {                                          \
+        NSString * __unsafe_unretained *sym =                                        \
+            (NSString * __unsafe_unretained *)dlsym(handle, #name);                  \
+        if (sym != NULL && *sym != nil) name = *sym;                                 \
+    } while (0)
 
-    _MRMediaRemoteSendCommand =
-        dlsym(mr_framework_handle, MRMediaRemoteSendCommandName);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoDidChangeNotification);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingApplicationIsPlayingDidChangeNotification);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingApplicationPIDUserInfoKey);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingApplicationIsPlayingUserInfoKey);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoAlbum);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoArtist);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoArtworkData);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoArtworkMIMEType);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoDuration);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoElapsedTime);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoTimestamp);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoTitle);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingInfoUniqueIdentifier);
+    OSL_RESOLVE_NSSTRING(kMRMediaRemoteNowPlayingApplicationPlaybackStateDidChangeNotification);
 
-    _MRMediaRemoteSetElapsedTime =
-        dlsym(mr_framework_handle, MRMediaRemoteSetElapsedName);
-    
-    _MRMediaRemoteRegisterForNowPlayingNotifications = dlsym(
-        mr_framework_handle, MRMediaRemoteRegisterForNowPlayingNotificationsName);
-
-    _MRMediaRemoteUnregisterForNowPlayingNotifications =
-        dlsym(mr_framework_handle,
-              MRMediaRemoteUnregisterForNowPlayingNotificationsName);
-
-    _MRMediaRemoteGetNowPlayingInfo =
-        dlsym(mr_framework_handle, MRMediaRemoteGetNowPlayingInfoName);
-
-    _MRMediaRemoteGetNowPlayingApplicationPID =
-        dlsym(mr_framework_handle, MRMediaRemoteGetNowPlayingApplicationPIDName);
-
-    _MRMediaRemoteGetNowPlayingApplicationIsPlaying = dlsym(
-        mr_framework_handle, MRMediaRemoteGetNowPlayingApplicationIsPlayingName);
-    
-    _MRMediaRemoteGetNowPlayingClient = dlsym(mr_framework_handle, MRMediaRemoteGetNowPlayingClientName);
-}
-
-// Public API implementations
-Boolean MRMediaRemoteSendCommand(MRCommand command, id userInfo) {
-    if (_MRMediaRemoteSendCommand) {
-        return _MRMediaRemoteSendCommand(command, userInfo);
-    }
-    return false;
-}
-
-void MRMediaRemoteSetElapsedTime(double elapsedTime) {
-    if (_MRMediaRemoteSetElapsedTime) {
-        _MRMediaRemoteSetElapsedTime(elapsedTime);
-    }
-}
-
-void MRMediaRemoteRegisterForNowPlayingNotifications(dispatch_queue_t queue) {
-    if (_MRMediaRemoteRegisterForNowPlayingNotifications) {
-        _MRMediaRemoteRegisterForNowPlayingNotifications(queue);
-    }
-}
-
-void MRMediaRemoteUnregisterForNowPlayingNotifications() {
-    if (_MRMediaRemoteUnregisterForNowPlayingNotifications) {
-        _MRMediaRemoteUnregisterForNowPlayingNotifications();
-    }
-}
-
-void MRMediaRemoteGetNowPlayingInfo(
-    dispatch_queue_t queue, MRMediaRemoteGetNowPlayingInfoCompletion completion) {
-    if (_MRMediaRemoteGetNowPlayingInfo) {
-        _MRMediaRemoteGetNowPlayingInfo(queue, completion);
-    }
-}
-
-void MRMediaRemoteGetNowPlayingApplicationPID(
-    dispatch_queue_t queue,
-    MRMediaRemoteGetNowPlayingApplicationPIDCompletion completion) {
-    if (_MRMediaRemoteGetNowPlayingApplicationPID) {
-        _MRMediaRemoteGetNowPlayingApplicationPID(queue, completion);
-    }
-}
-
-void MRMediaRemoteGetNowPlayingApplicationIsPlaying(
-    dispatch_queue_t queue,
-    MRMediaRemoteGetNowPlayingApplicationIsPlayingCompletion completion) {
-    if (_MRMediaRemoteGetNowPlayingApplicationIsPlaying) {
-        _MRMediaRemoteGetNowPlayingApplicationIsPlaying(queue, completion);
-    }
-}
-
-void MRMediaRemoteGetNowPlayingClient(dispatch_queue_t queue, MRMediaRemoteGetNowPlayingClientCompletion completion) {
-    if (_MRMediaRemoteGetNowPlayingClient) {
-        _MRMediaRemoteGetNowPlayingClient(queue, completion);
-    }
+    #undef OSL_RESOLVE_NSSTRING
 }
