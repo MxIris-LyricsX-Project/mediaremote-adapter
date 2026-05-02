@@ -52,7 +52,14 @@ public final class MediaController {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
-        process.arguments = [scriptPath, libraryPath] + arguments
+        var fullArguments = [scriptPath]
+        if !bundleIdentifiers.isEmpty {
+            fullArguments.append("--id")
+            fullArguments.append(bundleIdentifiers.joined(separator: "|"))
+        }
+        fullArguments.append(libraryPath)
+        fullArguments.append(contentsOf: arguments)
+        process.arguments = fullArguments
 
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
