@@ -15,7 +15,11 @@ $| = 1;
 
 # --- Command-Line Argument Parsing ---
 my $bundle_identifier;
-GetOptions('id=s' => \$bundle_identifier);
+my $debug_dump;
+GetOptions(
+    'id=s'       => \$bundle_identifier,
+    'debug-dump' => \$debug_dump,
+);
 
 # If a bundle ID is provided, set it as an environment variable.
 # This allows the Objective-C code to see the filter.
@@ -23,12 +27,19 @@ if (defined $bundle_identifier) {
     $ENV{'MEDIAREMOTEADAPTER_bundle_identifier'} = $bundle_identifier;
 }
 
+# When --debug-dump is on, ask the Objective-C side to embed the full source
+# NowPlayingInfo dictionary in every payload as `__debugFullDump`. The Swift
+# side decides what to do with it (typically log to console).
+if ($debug_dump) {
+    $ENV{'MEDIAREMOTEADAPTER_debug_dump'} = '1';
+}
+
 # --- Script Setup ---
 # This script dynamically loads the MediaRemoteAdapter dylib and executes
 # a command. It's designed to be called by a parent process that provides
 # the full path to the dylib.
 
-my $usage = "Usage: $0 [--id <bundle_id>] <path_to_dylib> <loop|play|pause|...>";
+my $usage = "Usage: $0 [--id <bundle_id>] [--debug-dump] <path_to_dylib> <loop|play|pause|...>";
 die $usage unless @ARGV >= 2;
 
 my $dylib_path = shift @ARGV;

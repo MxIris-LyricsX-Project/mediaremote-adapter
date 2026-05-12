@@ -20,6 +20,7 @@ static CFRunLoopRef _runLoop = NULL;
 static dispatch_queue_t _queue;
 static dispatch_block_t _debounce_block = NULL;
 static NSArray<NSString *> *_targetBundleIdentifiers = NULL;
+static BOOL _debugDumpEnabled = NO;
 
 static void printOut(NSString *message) {
     fprintf(stdout, "%s\n", [message UTF8String]);
@@ -135,7 +136,30 @@ static NSMutableDictionary * convertNowPlayingInformation(NSDictionary *informat
         }
         return nil;
     });
-    
+
+    if (_debugDumpEnabled) {
+        // Surface every entry in the source dictionary so the Swift side can
+        // see fields this adapter normally drops. Strings/numbers pass through;
+        // dates become epoch seconds; NSData is replaced with a length marker;
+        // everything else falls back to -description.
+        NSMutableDictionary *fullDump = [NSMutableDictionary dictionary];
+        [information enumerateKeysAndObjectsUsingBlock:^(id key, id value, BOOL *stop) {
+            NSString *keyString = [key description];
+            if ([value isKindOfClass:[NSString class]] ||
+                [value isKindOfClass:[NSNumber class]]) {
+                fullDump[keyString] = value;
+            } else if ([value isKindOfClass:[NSDate class]]) {
+                fullDump[keyString] = @([(NSDate *)value timeIntervalSince1970]);
+            } else if ([value isKindOfClass:[NSData class]]) {
+                fullDump[keyString] = [NSString stringWithFormat:@"<NSData length=%lu>",
+                                       (unsigned long)[(NSData *)value length]];
+            } else {
+                fullDump[keyString] = [value description];
+            }
+        }];
+        data[@"__debugFullDump"] = fullDump;
+    }
+
     return data;
 }
 
@@ -174,6 +198,30 @@ static void processNowPlayingInfo(NSDictionary *nowPlayingInfo, BOOL isPlaying, 
     
     NSMutableDictionary *data = convertNowPlayingInformation(nowPlayingInfo);
     [data setObject:@(isPlaying) forKey:(NSString *)kIsPlaying];
+
+    // Surface the now-playing client's identity in every payload so the host
+    // can: (1) display the source app, (2) detect iOS-on-Mac apps that abuse
+    // NowPlayingInfo fields (packing "song — artist" into one field, lyrics
+    // into another) and apply field recovery only for those.
+    //
+    // Note: at runtime this can be `MRClient` (a plain Obj-C class with these
+    // properties) or `_MRNowPlayingClientProtobuf` (where the same properties
+    // exist alongside `hasXxx` accessors). Both paths expose the named
+    // properties, so a plain nil-check works for both — calling `hasXxx`
+    // crashes when MRClient is the receiver (no such selector).
+    if (client.bundleIdentifier) {
+        [data setObject:client.bundleIdentifier forKey:@"bundleIdentifier"];
+    }
+    if (client.parentApplicationBundleIdentifier) {
+        [data setObject:client.parentApplicationBundleIdentifier forKey:@"parentApplicationBundleIdentifier"];
+    }
+    if (client.processIdentifier > 0) {
+        [data setObject:@(client.processIdentifier) forKey:@"processIdentifier"];
+    }
+    if (client.displayName) {
+        [data setObject:client.displayName forKey:@"applicationName"];
+    }
+
     printData(data, kMRMediaRemoteNowPlayingInfoDidChangeNotification);
 }
 
@@ -218,6 +266,15 @@ void bootstrap(void) {
     const char *bundleIdEnv = getenv("MEDIAREMOTEADAPTER_bundle_identifier");
     if (bundleIdEnv != NULL) {
         _targetBundleIdentifiers = [[NSString stringWithUTF8String:bundleIdEnv] componentsSeparatedByString:@"|"];
+    }
+
+    // Read the debug-dump toggle from the environment variable. The Perl
+    // script sets it to "1" when --debug-dump is on the command line, which
+    // makes convertNowPlayingInformation embed the full source dictionary
+    // under the `__debugFullDump` key in the JSON payload.
+    const char *debugDumpEnv = getenv("MEDIAREMOTEADAPTER_debug_dump");
+    if (debugDumpEnv != NULL && strcmp(debugDumpEnv, "1") == 0) {
+        _debugDumpEnabled = YES;
     }
 }
 
