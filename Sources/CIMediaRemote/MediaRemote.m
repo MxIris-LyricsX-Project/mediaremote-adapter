@@ -52,6 +52,7 @@ MR_SOFT_VOID_FN(MRMediaRemoteGetNowPlayingClient,
 
 __attribute__((constructor))
 static void resolveMediaRemoteConstants(void) {
+    if (@available(macOS 15.4, *)) {} else { return; }
     void *handle = MediaRemoteLibrary();
     if (!handle) return;
 
